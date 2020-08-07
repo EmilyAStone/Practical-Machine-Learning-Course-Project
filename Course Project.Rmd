@@ -1,0 +1,163 @@
+---
+title: "Practical Machine Learning Project"
+author: "Emily Stone"
+date: "24/07/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Background
+
+Six young health participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E).
+
+In this project I Will use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants, to predict which Class of movements they were performing.
+
+
+## Data
+
+```{r}
+library(caret)
+
+# set the URL for the download
+UrlTrain <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+UrlTest  <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+# download the datasets
+training <- read.csv(url(UrlTrain))
+testing  <- read.csv(url(UrlTest))
+
+# create a partition with the training dataset 
+inTrain  <- createDataPartition(training$classe, p=0.7, list=FALSE)
+TrainSet <- training[inTrain, ]
+TestSet  <- training[-inTrain, ]
+dim(TrainSet)
+```
+
+
+## Removing variables that hold mainly NAs:
+
+```{r}
+table(sapply(TrainSet, function(x) sum(is.na(x))))
+```
+
+There at 67 variables with 13456 NA values out of 13737 values. The remaining 93 variables have no NA variables.Therefore I have removed the 67 NA variables.
+
+```{r}
+NAColumns <- sapply(TrainSet, function(x) sum(is.na(x))) >= 13000
+TrainSet <- TrainSet[, NAColumns==F]
+table(sapply(TrainSet, function(x) sum(is.na(x))))
+```
+
+## Removing variables that have zero variance:
+```{r}
+NZV <- nearZeroVar(TrainSet)
+TrainSet <- TrainSet[, -NZV]
+dim(TrainSet)
+str(TrainSet)
+````
+
+## Remove identification only variables (columns 1 to 6)
+```{r}
+TrainSet <- TrainSet[, -c(1:6)]
+dim(TrainSet)
+```
+
+## Carry out the same transformation for the test data set
+
+```{r}
+TestSet <- TestSet[, NAColumns==F]
+TestSet <- TestSet[, -NZV]
+TestSet <- TestSet[, -c(1:6)]
+dim(TestSet)
+```
+
+
+
+# Prediction models considered
+
+## Classification tree
+
+```{r}
+library(rpart)
+library(rattle)
+decisionTreeMod1 <- rpart(classe ~ ., data=TrainSet, method="class")
+fancyRpartPlot(decisionTreeMod1)
+```
+
+
+```{r}
+predictTreeMod1 <- predict(decisionTreeMod1, TestSet, type = "class")
+cmtree <- confusionMatrix(predictTreeMod1, TestSet$classe)
+cmtree
+```
+
+```{r}
+plot(cmtree$table, col = cmtree$byClass, 
+     main = paste("Decision Tree - Accuracy =", round(cmtree$overall['Accuracy'], 4)))
+````
+
+
+## Random forest
+
+```{r}
+controlRF <- trainControl(method="cv", number=3, verboseIter=FALSE)
+modRF1 <- train(classe ~ ., data=TrainSet, method="rf", trControl=controlRF)
+modRF1$finalModel
+predictRF1 <- predict(modRF1, newdata=TestSet)
+cmrf <- confusionMatrix(predictRF1, TestSet$classe)
+cmrf
+```
+
+```{r}
+plot(cmrf$table, col = cmrf$byClass, main = paste("Random Forest Confusion Matrix: Accuracy =", round(cmrf$overall['Accuracy'], 4)))
+```
+
+
+## Generalised Boosted Regression Models
+```{r}
+set.seed(12345)
+controlGBM <- trainControl(method = "repeatedcv", number = 5, repeats = 1)
+modGBM  <- train(classe ~ ., data=TrainSet, method = "gbm", trControl = controlGBM, verbose = FALSE)
+modGBM$finalModel
+predictGBM <- predict(modGBM, newdata=TestSet)
+cmGBM <- confusionMatrix(predictGBM, TestSet$classe)
+cmGBM
+```
+
+
+```{r}
+plot(cmGBM$table, col = cmGBM$byClass, main = paste("Generalised Boosted Regression model Confusion Matrix: Accuracy =", round(cmGBM$overall['Accuracy'], 4)))
+```
+
+
+# Applying the best projection model
+
+I will be using the prediction model to predict 20 different test cases.
+By comparing the accuracy rate values of the three models, it is clear the the ‘Random Forest’ model is the winner. So will use it on the testing data
+
+## Preparing the test data
+
+
+```{r}
+testing<- testing[, NAColumns==F]
+testing <- testing[, -NZV]
+testing <- testing[, -c(1:6)]
+dim(testing)
+```
+
+## Predicted data
+```{r}
+Results <- predict(modRF1, newdata=testing)
+Results
+```
+
+
+
+
+
+ 
+ 
+ 
